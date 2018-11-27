@@ -1,0 +1,9 @@
+sudo modprobe vcan
+sudo /etc/init.d/networking restart
+sudo ip link add dev vcan0 type vcan
+sudo ifconfig vcan0 up
+
+
+canplayer vcan0=can0 -I candump_log
+
+candump vcan0 | cantools decode --single-line logan.dbc | grep STEERING
