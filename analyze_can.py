@@ -26,7 +26,7 @@ def read_can_file(can_file_path):
     return df_can
 
 # CAN file line format <(1533228233.465851) can0 55D#00DD600091C00000>
-can_file_path = "/media/andrei/CE04D7C504D7AF291/nemodrive/obd_read/data/log_0/can_raw.log"
+can_file_path = "/media/andrei/Samsung_T51/nemodrive_data/18_nov/session_1/1542549716_log/can_raw.log"
 
 df_can = read_can_file(can_file_path)
 

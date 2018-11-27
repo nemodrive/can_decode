@@ -3,13 +3,14 @@ import cantools
 import pandas as pd
 import cv2
 import numpy as np
+import os
 
-LOG_FOLDER = "/media/andrei/Seagate Expansion Drive/nemodrive/1539434900_log/"
-CAN_FILE_PATH = LOG_FOLDER + "can_raw.log"
+LOG_FOLDER = "/media/andrei/Samsung_T51/nemodrive_data/18_nov/session_1/1542549716_log/"
+CAN_FILE_PATH = os.path.join(LOG_FOLDER, "can_raw.log")
 DBC_FILE = "logan.dbc"
 SPEED_CAN_ID = "354"
 OBD_SPEED_FILE = LOG_FOLDER + "obd_SPEED.log"
-CAMERA_FILE_PREFIX = LOG_FOLDER + "small_1_cut"
+CAMERA_FILE_PREFIX = LOG_FOLDER + "camera_0"
 
 
 def read_can_file(can_file_path):
@@ -30,8 +31,14 @@ def get_can_data(db, cmd, data, msg):
 
 db = cantools.database.load_file(DBC_FILE, strict=False)
 
-cmd_name = "SPEED_SENSOR"
-data_name = "SPEED_KPS"
+cmd_names = [
+    ("SPEED_SENSOR", "SPEED_KPS"),
+    ("STEERING_SENSORS", "STEER_ANGLE"),
+    ("BRAKE_SENSOR", "PRESIUNE_C_P")
+]
+cmd_idx = 0
+cmd_name = cmd_names[cmd_idx][0]
+data_name = cmd_names[cmd_idx][1]
 
 """
     Decode values using: 
@@ -45,7 +52,7 @@ ffmpeg -f v4l2 -video_size {}x{} -i /dev/video{} -c copy {}.mkv
 # =======================================================================
 # -- Load Raw can
 
-df_can = read_can_file("/media/andrei/Seagate Expansion Drive/nemodrive/1533228223_log/can_raw.log")
+df_can = read_can_file(CAN_FILE_PATH)
 
 # =======================================================================
 # -- Load speed command
@@ -58,6 +65,12 @@ df_can_speed["speed"] = df_can_speed["data_str"].apply(lambda x: get_can_data(db
 df_can_speed[df_can_speed.speed > 0]
 df_can_speed["pts"] = df_can_speed["tp"] - 1539434950.220346
 
+plt.plot(df_can_speed["tp"].values, df_can_speed["speed"])
+plt.show()
+
+# Write to csv
+speed_file = os.path.join(LOG_FOLDER, "speed.csv")
+df_can_speed.to_csv(speed_file)
 # =======================================================================
 # -- Load steer command
 
@@ -70,6 +83,11 @@ df_can_steer = df_can[df_can["can_id"] == STEERING_CAN_ID]
 df_can_steer["steering"] = df_can_steer["data_str"].apply(lambda x: get_can_data(db,
                                                                                  STEER_CMD_NAME,
                                                                                  STEER_CMD_DATA_NAME, x))
+
+# Write to csv
+steer_file = os.path.join(LOG_FOLDER, "steer.csv")
+df_can_steer.to_csv(steer_file)
+
 # --Plot can data
 plt.plot(df_can_steer["tp"].values, df_can_steer["steering"])
 
@@ -96,7 +114,7 @@ df_speed["value"] = df_speed["value"].apply(lambda x: None if x == "None" else f
 df_speed.set_index(0, inplace=True)
 no_unique_val = df_speed["value"].nunique()
 
-# =======================================================================
+# ==================================================================================================
 # --Plot can data
 plt.plot(df_can_speed["tp"].values, df_can_speed["speed"])
 
@@ -105,7 +123,7 @@ plt.plot(df_speed.index, df_speed["value"].values)
 
 plt.show()
 
-# =======================================================================
+# ==================================================================================================
 # -- CAMERA processing
 
 camera_start_tp = None
@@ -157,11 +175,26 @@ with open(CAMERA_FILE_PREFIX + "_speed.log", 'w') as filehandle:
     for listitem in camera_speed["speed"].values:
         filehandle.write('%.2f\n' % listitem)
 
+# ==================================================================================================
+# -- Sync video movement # video setup
+video_start_pts = np.array([954.273594, 954.680844, 953.848110])
 
-# Run video
-vid = cv2.VideoCapture(CAMERA_FILE_PREFIX + ".mp4")
+# Approximate which is the first frame where the car moves
+video_frame_move = np.array([1462, 1450, 1478])
+video_frame_move_pts = np.array([48.575000, 48.179000, 49.107000])
 
-for i in range(350):
+video_pts_start_move = (video_start_pts + video_frame_move_pts).mean()
+
+# get the first CAN MSG tp where the speed is greater than 0
+can_first_move_tp = df_can_speed[df_can_speed.speed > 0].iloc[0]["tp"]
+
+video_start_tp = video_start_pts - video_pts_start_move + can_first_move_tp
+
+# ==================================================================================================
+
+vid = cv2.VideoCapture(CAMERA_FILE_PREFIX + ".mkv")
+
+for i in range(1410):
     ret, frame = vid.read()
 i += 1
 
